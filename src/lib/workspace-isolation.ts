@@ -6,8 +6,11 @@ import { getDatabase, logAuditEvent } from '@/lib/db'
 import type { WorkspaceIsolation } from '@/lib/workspaces'
 
 export type UnscopedWorkspaceResource =
+  | 'agent_filesystem'
   | 'local_sessions'
   | 'gateway_sessions'
+  | 'runtime_configuration'
+  | 'runtime_tasks'
   | 'session_transcripts'
   | 'session_preferences'
   | 'terminal_sessions'

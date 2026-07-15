@@ -9,6 +9,7 @@ import { getDatabase } from '@/lib/db'
 import { calculateTokenCost } from '@/lib/token-pricing'
 import { getProviderSubscriptionFlags } from '@/lib/provider-subscriptions'
 import { buildTaskCostReport, type TaskCostMetadata } from '@/lib/task-costs'
+import { getWorkspaceIsolation } from '@/lib/workspace-isolation'
 
 const DATA_PATH = config.tokensPath
 
@@ -183,11 +184,11 @@ async function loadTokenDataFromFile(workspaceId: number, providerSubscriptions:
  * Load token data from all sources: DB, file, and gateway session stores.
  * All sources are merged and deduplicated so session-derived data is always included.
  */
-async function loadTokenData(workspaceId: number): Promise<TokenUsageRecord[]> {
+async function loadTokenData(workspaceId: number, includeGlobalRuntime: boolean): Promise<TokenUsageRecord[]> {
   const providerSubscriptions = getProviderSubscriptionFlags()
   const dbRecords = loadTokenDataFromDb(workspaceId, providerSubscriptions)
-  const fileRecords = await loadTokenDataFromFile(workspaceId, providerSubscriptions)
-  const sessionRecords = deriveFromSessions(workspaceId, providerSubscriptions)
+  const fileRecords = includeGlobalRuntime ? await loadTokenDataFromFile(workspaceId, providerSubscriptions) : []
+  const sessionRecords = includeGlobalRuntime ? deriveFromSessions(workspaceId, providerSubscriptions) : []
   return dedupeTokenRecords([...dbRecords, ...fileRecords, ...sessionRecords])
     .sort((a, b) => b.timestamp - a.timestamp)
 }
@@ -322,7 +323,11 @@ export async function GET(request: NextRequest) {
     const format = searchParams.get('format') || 'json'
 
     const workspaceId = auth.user.workspace_id ?? 1
-    const tokenData = await loadTokenData(workspaceId)
+    const isolation = getWorkspaceIsolation(auth.user)
+    if (!isolation) {
+      return NextResponse.json({ error: 'Workspace isolation context is unavailable' }, { status: 403 })
+    }
+    const tokenData = await loadTokenData(workspaceId, isolation === 'shared')
     const filteredData = filterByTimeframe(tokenData, timeframe)
 
     if (action === 'list') {
@@ -569,6 +574,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const workspaceId = auth.user.workspace_id ?? 1
+    const isolation = getWorkspaceIsolation(auth.user)
+    if (!isolation) {
+      return NextResponse.json({ error: 'Workspace isolation context is unavailable' }, { status: 403 })
+    }
+    const isStrictWorkspace = isolation === 'strict'
     const { model, sessionId, inputTokens, outputTokens, operation = 'chat_completion', duration, taskId } = body
 
     if (!model || !sessionId || typeof inputTokens !== 'number' || typeof outputTokens !== 'number') {
@@ -609,14 +619,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Persist only manually posted usage records in the JSON file.
-    const existingData = await loadTokenDataFromFile(workspaceId, providerSubscriptions)
-    existingData.unshift(record)
+    if (!isStrictWorkspace) {
+      const existingData = await loadTokenDataFromFile(workspaceId, providerSubscriptions)
+      existingData.unshift(record)
 
-    if (existingData.length > 10000) {
-      existingData.splice(10000)
+      if (existingData.length > 10000) {
+        existingData.splice(10000)
+      }
+
+      await saveTokenData(existingData)
     }
-
-    await saveTokenData(existingData)
 
     // Also INSERT into the token_usage SQLite table so by-agent / DB-based
     // aggregations (which read from token_usage, not from the JSON file)
@@ -642,6 +654,7 @@ export async function POST(request: NextRequest) {
         record.agentName,
       )
     } catch (err) {
+      if (isStrictWorkspace) throw err
       logger.warn({ err }, 'token_usage DB insert failed (JSON record persisted)')
     }
 

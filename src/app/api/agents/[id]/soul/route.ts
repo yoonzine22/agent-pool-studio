@@ -7,6 +7,7 @@ import { resolveWithin } from '@/lib/paths';
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace';
 import { requireRole } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { denyUnscopedResourceForStrictWorkspace, getWorkspaceIsolation } from '@/lib/workspace-isolation';
 
 function resolveAgentWorkspacePath(workspace: string): string {
   if (isAbsolute(workspace)) return resolve(workspace)
@@ -23,6 +24,9 @@ export async function GET(
 ) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolation = getWorkspaceIsolation(auth.user)
+  if (!isolation) return NextResponse.json({ error: 'Workspace isolation context is unavailable' }, { status: 403 })
+  const isStrictWorkspace = isolation === 'strict'
 
   try {
     const db = getDatabase();
@@ -46,16 +50,18 @@ export async function GET(
     let soulContent = ''
     let source: 'workspace' | 'database' | 'none' = 'none'
 
-    try {
-      const agentConfig = agent.config ? JSON.parse(agent.config) : {}
-      const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name)
-      const match = readAgentWorkspaceFile(candidates, ['soul.md', 'SOUL.md'])
-      if (match.exists) {
-        soulContent = match.content
-        source = 'workspace'
+    if (!isStrictWorkspace) {
+      try {
+        const agentConfig = agent.config ? JSON.parse(agent.config) : {}
+        const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name)
+        const match = readAgentWorkspaceFile(candidates, ['soul.md', 'SOUL.md'])
+        if (match.exists) {
+          soulContent = match.content
+          source = 'workspace'
+        }
+      } catch (err) {
+        logger.warn({ err, agent: agent.name }, 'Failed to read soul.md from workspace')
       }
-    } catch (err) {
-      logger.warn({ err, agent: agent.name }, 'Failed to read soul.md from workspace')
     }
 
     // Fall back to database value
@@ -67,15 +73,17 @@ export async function GET(
     const templatesPath = config.soulTemplatesDir;
     let availableTemplates: string[] = [];
 
-    try {
-      if (templatesPath && existsSync(templatesPath)) {
-        const files = readdirSync(templatesPath);
-        availableTemplates = files
-          .filter(file => file.endsWith('.md'))
-          .map(file => file.replace('.md', ''));
+    if (!isStrictWorkspace) {
+      try {
+        if (templatesPath && existsSync(templatesPath)) {
+          const files = readdirSync(templatesPath);
+          availableTemplates = files
+            .filter(file => file.endsWith('.md'))
+            .map(file => file.replace('.md', ''));
+        }
+      } catch (error) {
+        logger.warn({ err: error }, 'Could not read soul templates directory');
       }
-    } catch (error) {
-      logger.warn({ err: error }, 'Could not read soul templates directory');
     }
 
     return NextResponse.json({
@@ -104,6 +112,9 @@ export async function PUT(
 ) {
   const auth = requireRole(request, 'operator');
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const isolation = getWorkspaceIsolation(auth.user)
+  if (!isolation) return NextResponse.json({ error: 'Workspace isolation context is unavailable' }, { status: 403 })
+  const isStrictWorkspace = isolation === 'strict'
 
   try {
     const db = getDatabase();
@@ -129,6 +140,9 @@ export async function PUT(
     
     // If template_name is provided, load from template
     if (template_name) {
+      if (isStrictWorkspace) {
+        return NextResponse.json({ error: 'Global SOUL templates are unavailable in strict workspaces' }, { status: 403 })
+      }
       if (!config.soulTemplatesDir) {
         return NextResponse.json({ error: 'Templates directory not configured' }, { status: 500 });
       }
@@ -160,18 +174,20 @@ export async function PUT(
 
     // Write to workspace file if available
     let savedToWorkspace = false
-    try {
-      const agentConfig = agent.config ? JSON.parse(agent.config) : {}
-      const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name)
-      const safeWorkspace = candidates[0]
-      if (safeWorkspace) {
-        const safeSoulPath = resolveWithin(safeWorkspace, 'soul.md')
-        mkdirSync(dirname(safeSoulPath), { recursive: true })
-        writeFileSync(safeSoulPath, newSoulContent || '', 'utf-8')
-        savedToWorkspace = true
+    if (!isStrictWorkspace) {
+      try {
+        const agentConfig = agent.config ? JSON.parse(agent.config) : {}
+        const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name)
+        const safeWorkspace = candidates[0]
+        if (safeWorkspace) {
+          const safeSoulPath = resolveWithin(safeWorkspace, 'soul.md')
+          mkdirSync(dirname(safeSoulPath), { recursive: true })
+          writeFileSync(safeSoulPath, newSoulContent || '', 'utf-8')
+          savedToWorkspace = true
+        }
+      } catch (err) {
+        logger.warn({ err, agent: agent.name }, 'Failed to write soul.md to workspace, saving to DB only')
       }
-    } catch (err) {
-      logger.warn({ err, agent: agent.name }, 'Failed to write soul.md to workspace, saving to DB only')
     }
 
     // Update SOUL content in DB
@@ -220,6 +236,15 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireRole(request, 'viewer')
+  if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDeny = denyUnscopedResourceForStrictWorkspace(
+    auth.user,
+    'runtime_configuration',
+    new URL(request.url).pathname,
+  )
+  if (isolationDeny) return isolationDeny
+
   try {
     const { searchParams } = new URL(request.url);
     const templateName = searchParams.get('template');

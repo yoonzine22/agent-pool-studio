@@ -7,6 +7,7 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { resolveWithin } from '@/lib/paths'
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace'
 import { logger } from '@/lib/logger'
+import { denyUnscopedResourceForStrictWorkspace } from '@/lib/workspace-isolation'
 
 const ALLOWED_FILES = new Set([
   'agent.md',
@@ -50,6 +51,12 @@ export async function GET(
 ) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDeny = denyUnscopedResourceForStrictWorkspace(
+    auth.user,
+    'agent_filesystem',
+    new URL(request.url).pathname,
+  )
+  if (isolationDeny) return isolationDeny
 
   try {
     const { id } = await params
@@ -96,6 +103,12 @@ export async function PUT(
 ) {
   const auth = requireRole(request, 'operator')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDeny = denyUnscopedResourceForStrictWorkspace(
+    auth.user,
+    'agent_filesystem',
+    new URL(request.url).pathname,
+  )
+  if (isolationDeny) return isolationDeny
 
   try {
     const { id } = await params

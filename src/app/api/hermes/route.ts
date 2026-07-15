@@ -7,6 +7,7 @@ import { isHermesInstalled, isHermesGatewayRunning, scanHermesSessions } from '@
 import { getHermesTasks } from '@/lib/hermes-tasks'
 import { getHermesMemory } from '@/lib/hermes-memory'
 import { logger } from '@/lib/logger'
+import { denyUnscopedResourceForStrictWorkspace } from '@/lib/workspace-isolation'
 
 // In Docker, HOME=/nonexistent — check dataDir first, then homeDir
 import { resolve } from 'node:path'
@@ -22,6 +23,12 @@ const HOOK_DIR = join(HERMES_HOME, 'hooks', 'mission-control')
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDeny = denyUnscopedResourceForStrictWorkspace(
+    auth.user,
+    'runtime_configuration',
+    new URL(request.url).pathname,
+  )
+  if (isolationDeny) return isolationDeny
 
   try {
     const installed = isHermesInstalled()
@@ -67,6 +74,12 @@ function extractDeviceAuth(output: string): { cleanOutput: string; deviceUrl: st
 export async function POST(request: NextRequest) {
   const auth = requireRole(request, 'admin')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDeny = denyUnscopedResourceForStrictWorkspace(
+    auth.user,
+    'runtime_configuration',
+    new URL(request.url).pathname,
+  )
+  if (isolationDeny) return isolationDeny
 
   try {
     const body = await request.json()

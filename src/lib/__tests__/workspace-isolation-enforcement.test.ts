@@ -158,4 +158,20 @@ describe('direct session API coverage', () => {
     expect(ptyRoute).toContain("'terminal_sessions'")
     expect(ptyWebSocket).toContain("'terminal_sessions'")
   })
+
+  it('guards remaining runtime filesystem consumers', () => {
+    const filesRoute = readFileSync(join(process.cwd(), 'src/app/api/agents/[id]/files/route.ts'), 'utf8')
+    const soulRoute = readFileSync(join(process.cwd(), 'src/app/api/agents/[id]/soul/route.ts'), 'utf8')
+    const tokensRoute = readFileSync(join(process.cwd(), 'src/app/api/tokens/route.ts'), 'utf8')
+    const hermesRoute = readFileSync(join(process.cwd(), 'src/app/api/hermes/route.ts'), 'utf8')
+    const claudeTasksRoute = readFileSync(join(process.cwd(), 'src/app/api/claude-tasks/route.ts'), 'utf8')
+
+    expect(filesRoute).toContain("'agent_filesystem'")
+    expect(soulRoute).toContain("const auth = requireRole(request, 'viewer')")
+    expect(soulRoute).toContain('if (!isStrictWorkspace)')
+    expect(tokensRoute).toContain("const tokenData = await loadTokenData(workspaceId, isolation === 'shared')")
+    expect(tokensRoute).toContain('if (!isStrictWorkspace)')
+    expect(hermesRoute.match(/'runtime_configuration'/g)).toHaveLength(2)
+    expect(claudeTasksRoute).toContain("'runtime_tasks'")
+  })
 })
