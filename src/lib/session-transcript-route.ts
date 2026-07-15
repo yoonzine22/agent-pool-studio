@@ -6,6 +6,7 @@ import { config } from '@/lib/config'
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
 import { getOpenCodeDbCandidates, epochMsToIso } from '@/lib/opencode-sessions'
+import { denyUnscopedResourceForStrictWorkspace } from '@/lib/workspace-isolation'
 
 type MessageContentPart =
   | { type: 'text'; text: string }
@@ -460,6 +461,8 @@ function readHermesTranscript(sessionId: string, limit: number): TranscriptMessa
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDenied = denyUnscopedResourceForStrictWorkspace(auth.user, 'session_transcripts', new URL(request.url).pathname)
+  if (isolationDenied) return isolationDenied
 
   try {
     const { searchParams } = new URL(request.url)

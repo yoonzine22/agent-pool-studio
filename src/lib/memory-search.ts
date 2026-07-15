@@ -21,7 +21,8 @@ import { logger } from '@/lib/logger'
 
 export function ensureFtsTable(db: Database.Database): void {
   db.exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts_v2 USING fts5(
+      scope UNINDEXED,
       path,
       title,
       content,
@@ -29,9 +30,11 @@ export function ensureFtsTable(db: Database.Database): void {
     )
   `)
   db.exec(`
-    CREATE TABLE IF NOT EXISTS memory_fts_meta (
-      key TEXT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS memory_fts_meta_v2 (
+      scope TEXT NOT NULL,
+      key TEXT NOT NULL,
       value TEXT
+      ,PRIMARY KEY (scope, key)
     )
   `)
 }
@@ -53,7 +56,7 @@ function stripFrontmatter(content: string): string {
   return content.replace(/^---\n[\s\S]*?\n---\n?/, '')
 }
 
-export async function rebuildIndex(baseDir: string, allowedPrefixes: string[]): Promise<{ indexed: number; duration: number }> {
+export async function rebuildIndex(baseDir: string, allowedPrefixes: string[], scope = 'shared'): Promise<{ indexed: number; duration: number }> {
   const start = Date.now()
   const db = getDatabase()
   ensureFtsTable(db)
@@ -73,18 +76,18 @@ export async function rebuildIndex(baseDir: string, allowedPrefixes: string[]): 
     files.push(...await scanMemoryFiles(baseDir, { extensions: ['.md', '.txt'] }))
   }
 
-  const insertStmt = db.prepare('INSERT INTO memory_fts (path, title, content) VALUES (?, ?, ?)')
+  const insertStmt = db.prepare('INSERT INTO memory_fts_v2 (scope, path, title, content) VALUES (?, ?, ?, ?)')
 
   let indexed = 0
   db.transaction(() => {
-    db.exec('DELETE FROM memory_fts')
+    db.prepare('DELETE FROM memory_fts_v2 WHERE scope = ?').run(scope)
 
     for (const file of files) {
       try {
         const content = readFileSync(join(baseDir, file.path), 'utf-8')
         const title = extractTitle(content, file.name)
         const body = stripFrontmatter(content)
-        insertStmt.run(file.path, title, body)
+        insertStmt.run(scope, file.path, title, body)
         indexed++
       } catch {
         // Skip unreadable files
@@ -92,11 +95,11 @@ export async function rebuildIndex(baseDir: string, allowedPrefixes: string[]): 
     }
 
     db.prepare(
-      'INSERT OR REPLACE INTO memory_fts_meta (key, value) VALUES (?, ?)'
-    ).run('last_rebuild', new Date().toISOString())
+      'INSERT OR REPLACE INTO memory_fts_meta_v2 (scope, key, value) VALUES (?, ?, ?)'
+    ).run(scope, 'last_rebuild', new Date().toISOString())
     db.prepare(
-      'INSERT OR REPLACE INTO memory_fts_meta (key, value) VALUES (?, ?)'
-    ).run('file_count', String(indexed))
+      'INSERT OR REPLACE INTO memory_fts_meta_v2 (scope, key, value) VALUES (?, ?, ?)'
+    ).run(scope, 'file_count', String(indexed))
   })()
 
   const duration = Date.now() - start
@@ -107,7 +110,7 @@ export async function rebuildIndex(baseDir: string, allowedPrefixes: string[]): 
 /**
  * Index a single file (for incremental updates after saves).
  */
-export function indexFile(db: Database.Database, baseDir: string, relativePath: string): void {
+export function indexFile(db: Database.Database, baseDir: string, relativePath: string, scope = 'shared'): void {
   ensureFtsTable(db)
   try {
     const content = readFileSync(join(baseDir, relativePath), 'utf-8')
@@ -116,8 +119,8 @@ export function indexFile(db: Database.Database, baseDir: string, relativePath: 
     const body = stripFrontmatter(content)
 
     db.transaction(() => {
-      db.prepare('DELETE FROM memory_fts WHERE path = ?').run(relativePath)
-      db.prepare('INSERT INTO memory_fts (path, title, content) VALUES (?, ?, ?)').run(relativePath, title, body)
+      db.prepare('DELETE FROM memory_fts_v2 WHERE scope = ? AND path = ?').run(scope, relativePath)
+      db.prepare('INSERT INTO memory_fts_v2 (scope, path, title, content) VALUES (?, ?, ?, ?)').run(scope, relativePath, title, body)
     })()
   } catch (err) {
     logger.warn({ err, path: relativePath }, 'Failed to index file for FTS')
@@ -127,9 +130,9 @@ export function indexFile(db: Database.Database, baseDir: string, relativePath: 
 /**
  * Remove a file from the index.
  */
-export function removeFromIndex(db: Database.Database, relativePath: string): void {
+export function removeFromIndex(db: Database.Database, relativePath: string, scope = 'shared'): void {
   try {
-    db.prepare('DELETE FROM memory_fts WHERE path = ?').run(relativePath)
+    db.prepare('DELETE FROM memory_fts_v2 WHERE scope = ? AND path = ?').run(scope, relativePath)
   } catch {
     // Index may not exist yet
   }
@@ -152,16 +155,16 @@ export interface SearchResponse {
   indexedAt: string | null
 }
 
-async function ensureIndex(baseDir: string, allowedPrefixes: string[]): Promise<void> {
+async function ensureIndex(baseDir: string, allowedPrefixes: string[], scope: string): Promise<void> {
   const db = getDatabase()
   ensureFtsTable(db)
 
   const meta = db.prepare(
-    "SELECT value FROM memory_fts_meta WHERE key = 'last_rebuild'"
-  ).get() as { value: string } | undefined
+    "SELECT value FROM memory_fts_meta_v2 WHERE scope = ? AND key = 'last_rebuild'"
+  ).get(scope) as { value: string } | undefined
 
   if (!meta) {
-    await rebuildIndex(baseDir, allowedPrefixes)
+    await rebuildIndex(baseDir, allowedPrefixes, scope)
   }
 }
 
@@ -169,9 +172,10 @@ export async function searchMemory(
   baseDir: string,
   allowedPrefixes: string[],
   query: string,
-  opts?: { limit?: number }
+  opts?: { limit?: number; scope?: string }
 ): Promise<SearchResponse> {
-  await ensureIndex(baseDir, allowedPrefixes)
+  const scope = opts?.scope ?? 'shared'
+  await ensureIndex(baseDir, allowedPrefixes, scope)
 
   const db = getDatabase()
   const limit = opts?.limit ?? 20
@@ -186,13 +190,13 @@ export async function searchMemory(
       SELECT
         path,
         title,
-        snippet(memory_fts, 2, '<mark>', '</mark>', '...', 40) as snippet,
-        bm25(memory_fts, 1.0, 5.0, 1.0) as rank
-      FROM memory_fts
-      WHERE memory_fts MATCH ?
+        snippet(memory_fts_v2, 3, '<mark>', '</mark>', '...', 40) as snippet,
+        bm25(memory_fts_v2, 0.0, 1.0, 5.0, 1.0) as rank
+      FROM memory_fts_v2
+      WHERE memory_fts_v2 MATCH ? AND scope = ?
       ORDER BY rank
       LIMIT ?
-    `).all(sanitized, limit) as Array<{ path: string; title: string; snippet: string; rank: number }>
+    `).all(sanitized, scope, limit) as Array<{ path: string; title: string; snippet: string; rank: number }>
 
     results = rows.map((r) => ({
       path: r.path,
@@ -202,8 +206,8 @@ export async function searchMemory(
     }))
 
     const countRow = db.prepare(
-      'SELECT count(*) as cnt FROM memory_fts WHERE memory_fts MATCH ?'
-    ).get(sanitized) as { cnt: number }
+      'SELECT count(*) as cnt FROM memory_fts_v2 WHERE memory_fts_v2 MATCH ? AND scope = ?'
+    ).get(sanitized, scope) as { cnt: number }
     total = countRow.cnt
   } catch (err) {
     logger.warn({ err, query: sanitized }, 'FTS5 query failed, falling back to phrase search')
@@ -211,10 +215,10 @@ export async function searchMemory(
       const fallbackQuery = `"${query.replace(/"/g, '""')}"`
       const rows = db.prepare(`
         SELECT path, title,
-          snippet(memory_fts, 2, '<mark>', '</mark>', '...', 40) as snippet,
-          bm25(memory_fts, 1.0, 5.0, 1.0) as rank
-        FROM memory_fts WHERE memory_fts MATCH ? ORDER BY rank LIMIT ?
-      `).all(fallbackQuery, limit) as Array<{ path: string; title: string; snippet: string; rank: number }>
+          snippet(memory_fts_v2, 3, '<mark>', '</mark>', '...', 40) as snippet,
+          bm25(memory_fts_v2, 0.0, 1.0, 5.0, 1.0) as rank
+        FROM memory_fts_v2 WHERE memory_fts_v2 MATCH ? AND scope = ? ORDER BY rank LIMIT ?
+      `).all(fallbackQuery, scope, limit) as Array<{ path: string; title: string; snippet: string; rank: number }>
       results = rows.map((r) => ({ path: r.path, title: r.title, snippet: r.snippet, rank: Math.abs(r.rank) }))
       total = results.length
     } catch {
@@ -223,11 +227,11 @@ export async function searchMemory(
   }
 
   const meta = db.prepare(
-    "SELECT value FROM memory_fts_meta WHERE key = 'last_rebuild'"
-  ).get() as { value: string } | undefined
+    "SELECT value FROM memory_fts_meta_v2 WHERE scope = ? AND key = 'last_rebuild'"
+  ).get(scope) as { value: string } | undefined
   const fileCountMeta = db.prepare(
-    "SELECT value FROM memory_fts_meta WHERE key = 'file_count'"
-  ).get() as { value: string } | undefined
+    "SELECT value FROM memory_fts_meta_v2 WHERE scope = ? AND key = 'file_count'"
+  ).get(scope) as { value: string } | undefined
 
   return {
     query,

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { readLimiter, mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
-import { MEMORY_PATH, MEMORY_ALLOWED_PREFIXES } from '@/lib/memory-path'
+import { MEMORY_ALLOWED_PREFIXES } from '@/lib/memory-path'
 import { searchMemory, rebuildIndex } from '@/lib/memory-search'
 import { getDatabase } from '@/lib/db'
+import { resolveWorkspaceMemoryAccess } from '@/lib/workspace-isolation'
 
 /**
  * GET /api/memory/search?q=query&limit=20
@@ -20,7 +21,8 @@ export async function GET(request: NextRequest) {
   const limited = readLimiter(request)
   if (limited) return limited
 
-  if (!MEMORY_PATH) {
+  const memoryAccess = resolveWorkspaceMemoryAccess(auth.user)
+  if (!memoryAccess) {
     return NextResponse.json({ error: 'Memory directory not configured' }, { status: 500 })
   }
 
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const response = await searchMemory(MEMORY_PATH, MEMORY_ALLOWED_PREFIXES, query, { limit })
+    const response = await searchMemory(memoryAccess.root, MEMORY_ALLOWED_PREFIXES, query, { limit, scope: memoryAccess.scope })
     return NextResponse.json(response)
   } catch (err) {
     logger.error({ err }, 'Memory search API error')
@@ -54,7 +56,8 @@ export async function POST(request: NextRequest) {
   const rateCheck = mutationLimiter(request)
   if (rateCheck) return rateCheck
 
-  if (!MEMORY_PATH) {
+  const memoryAccess = resolveWorkspaceMemoryAccess(auth.user)
+  if (!memoryAccess) {
     return NextResponse.json({ error: 'Memory directory not configured' }, { status: 500 })
   }
 
@@ -62,7 +65,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     if (body.action === 'rebuild') {
-      const result = await rebuildIndex(MEMORY_PATH, MEMORY_ALLOWED_PREFIXES)
+      const result = await rebuildIndex(memoryAccess.root, MEMORY_ALLOWED_PREFIXES, memoryAccess.scope)
       return NextResponse.json({
         success: true,
         message: `Rebuilt FTS index: ${result.indexed} files in ${result.duration}ms`,

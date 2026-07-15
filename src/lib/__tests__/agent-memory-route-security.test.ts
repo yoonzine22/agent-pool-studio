@@ -46,6 +46,12 @@ describe('agent memory route security', () => {
 
   it('GET allows an agent key to access its own memory route', async () => {
     prepareMock.mockImplementation((sql: string) => {
+      if (sql.includes('FROM workspaces')) {
+        return {
+          get: vi.fn(() => ({ id: 7, tenant_id: 1, isolation: 'shared' })),
+        }
+      }
+
       if (sql.includes('SELECT * FROM agents')) {
         return {
           get: vi.fn(() => ({
@@ -75,6 +81,7 @@ describe('agent memory route security', () => {
         username: 'agent-a',
         role: 'viewer',
         workspace_id: 7,
+        tenant_id: 1,
         agent_name: 'agent-a',
         agent_id: 42,
       },

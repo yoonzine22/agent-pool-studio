@@ -5,7 +5,8 @@ import { requireRole } from '@/lib/auth'
 import { readLimiter } from '@/lib/rate-limit'
 import { generateContextPayload, ContextPayload } from '@/lib/memory-utils'
 import { logger } from '@/lib/logger'
-import { MEMORY_PATH, MEMORY_ALLOWED_PREFIXES } from '@/lib/memory-path'
+import { MEMORY_ALLOWED_PREFIXES } from '@/lib/memory-path'
+import { resolveWorkspaceMemoryAccess } from '@/lib/workspace-isolation'
 
 function mergeContextPayloads(payloads: ContextPayload[]): ContextPayload {
   return {
@@ -39,7 +40,8 @@ export async function GET(request: NextRequest) {
   const limited = readLimiter(request)
   if (limited) return limited
 
-  if (!MEMORY_PATH) {
+  const memoryAccess = resolveWorkspaceMemoryAccess(auth.user)
+  if (!memoryAccess) {
     return NextResponse.json({ error: 'Memory directory not configured' }, { status: 500 })
   }
 
@@ -48,18 +50,18 @@ export async function GET(request: NextRequest) {
       const payloads: ContextPayload[] = []
       for (const prefix of MEMORY_ALLOWED_PREFIXES) {
         const folder = prefix.replace(/\/$/, '')
-        const fullPath = join(MEMORY_PATH, folder)
+        const fullPath = join(memoryAccess.root, folder)
         if (!existsSync(fullPath)) continue
         payloads.push(await generateContextPayload(fullPath))
       }
       return NextResponse.json(
         payloads.length > 0
           ? mergeContextPayloads(payloads)
-          : await generateContextPayload(MEMORY_PATH)
+          : await generateContextPayload(memoryAccess.root)
       )
     }
 
-    const payload = await generateContextPayload(MEMORY_PATH)
+    const payload = await generateContextPayload(memoryAccess.root)
     return NextResponse.json(payload)
   } catch (err) {
     logger.error({ err }, 'Memory context API error')

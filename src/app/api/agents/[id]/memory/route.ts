@@ -8,6 +8,7 @@ import { dirname } from 'node:path';
 import { resolveWithin } from '@/lib/paths';
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace';
 import type Database from 'better-sqlite3';
+import { getWorkspaceIsolation } from '@/lib/workspace-isolation';
 
 // 512KB — generous but bounded. Prevents unbounded growth from append mode.
 const MAX_WORKING_MEMORY_SIZE = 512 * 1024;
@@ -49,6 +50,11 @@ export async function GET(
     const { workspaceId } = wsResult;
     const selfDeny = requireAgentSelfAccess(auth.user, agentId);
     if (selfDeny) return selfDeny;
+    const isolation = getWorkspaceIsolation(auth.user);
+    if (!isolation) {
+      return NextResponse.json({ error: 'Workspace isolation context is invalid' }, { status: 403 });
+    }
+    const isStrictWorkspace = isolation === 'strict';
 
     const agent = getAgentByIdOrName(db, agentId, workspaceId);
     if (!agent) {
@@ -68,18 +74,20 @@ export async function GET(
     let workingMemory = '';
     let source: 'workspace' | 'database' | 'none' = 'none';
     try {
-      const agentConfig = agent.config ? JSON.parse(agent.config) : {};
-      const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name);
-      const match = readAgentWorkspaceFile(candidates, ['WORKING.md', 'working.md', 'MEMORY.md', 'memory.md']);
-      if (match.exists && match.path) {
-        const wsMtime = Math.floor(statSync(match.path).mtimeMs / 1000);
-        if (dbUpdatedAt > wsMtime && dbMemory) {
-          // DB is newer — workspace write likely failed on last PUT
-          workingMemory = dbMemory;
-          source = 'database';
-        } else {
-          workingMemory = match.content;
-          source = 'workspace';
+      if (!isStrictWorkspace) {
+        const agentConfig = agent.config ? JSON.parse(agent.config) : {};
+        const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name);
+        const match = readAgentWorkspaceFile(candidates, ['WORKING.md', 'working.md', 'MEMORY.md', 'memory.md']);
+        if (match.exists && match.path) {
+          const wsMtime = Math.floor(statSync(match.path).mtimeMs / 1000);
+          if (dbUpdatedAt > wsMtime && dbMemory) {
+            // DB is newer — workspace write likely failed on last PUT
+            workingMemory = dbMemory;
+            source = 'database';
+          } else {
+            workingMemory = match.content;
+            source = 'workspace';
+          }
         }
       }
     } catch (err) {
@@ -127,6 +135,11 @@ export async function PUT(
     const { workspaceId } = wsResult;
     const selfDeny = requireAgentSelfAccess(auth.user, agentId);
     if (selfDeny) return selfDeny;
+    const isolation = getWorkspaceIsolation(auth.user);
+    if (!isolation) {
+      return NextResponse.json({ error: 'Workspace isolation context is invalid' }, { status: 403 });
+    }
+    const isStrictWorkspace = isolation === 'strict';
     const body = await request.json();
     const { working_memory, append } = body;
 
@@ -163,14 +176,16 @@ export async function PUT(
     // Best effort: sync workspace WORKING.md if agent workspace is configured
     let savedToWorkspace = false;
     try {
-      const agentConfig = agent.config ? JSON.parse(agent.config) : {};
-      const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name);
-      const safeWorkspace = candidates[0];
-      if (safeWorkspace) {
-        const safeWorkingPath = resolveWithin(safeWorkspace, 'WORKING.md');
-        mkdirSync(dirname(safeWorkingPath), { recursive: true });
-        writeFileSync(safeWorkingPath, newContent, 'utf-8');
-        savedToWorkspace = true;
+      if (!isStrictWorkspace) {
+        const agentConfig = agent.config ? JSON.parse(agent.config) : {};
+        const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name);
+        const safeWorkspace = candidates[0];
+        if (safeWorkspace) {
+          const safeWorkingPath = resolveWithin(safeWorkspace, 'WORKING.md');
+          mkdirSync(dirname(safeWorkingPath), { recursive: true });
+          writeFileSync(safeWorkingPath, newContent, 'utf-8');
+          savedToWorkspace = true;
+        }
       }
     } catch (err) {
       logger.warn({ err, agent: agent.name }, 'Failed to write WORKING.md to workspace');
@@ -234,6 +249,11 @@ export async function DELETE(
     const { workspaceId } = wsResult;
     const selfDeny = requireAgentSelfAccess(auth.user, agentId);
     if (selfDeny) return selfDeny;
+    const isolation = getWorkspaceIsolation(auth.user);
+    if (!isolation) {
+      return NextResponse.json({ error: 'Workspace isolation context is invalid' }, { status: 403 });
+    }
+    const isStrictWorkspace = isolation === 'strict';
 
     const agent = getAgentByIdOrName(db, agentId, workspaceId);
     if (!agent) {
@@ -244,13 +264,15 @@ export async function DELETE(
 
     // Best effort: clear workspace WORKING.md if agent workspace is configured
     try {
-      const agentConfig = agent.config ? JSON.parse(agent.config) : {};
-      const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name);
-      const safeWorkspace = candidates[0];
-      if (safeWorkspace) {
-        const safeWorkingPath = resolveWithin(safeWorkspace, 'WORKING.md');
-        mkdirSync(dirname(safeWorkingPath), { recursive: true });
-        writeFileSync(safeWorkingPath, '', 'utf-8');
+      if (!isStrictWorkspace) {
+        const agentConfig = agent.config ? JSON.parse(agent.config) : {};
+        const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name);
+        const safeWorkspace = candidates[0];
+        if (safeWorkspace) {
+          const safeWorkingPath = resolveWithin(safeWorkspace, 'WORKING.md');
+          mkdirSync(dirname(safeWorkingPath), { recursive: true });
+          writeFileSync(safeWorkingPath, '', 'utf-8');
+        }
       }
     } catch (err) {
       logger.warn({ err, agent: agent.name }, 'Failed to clear WORKING.md in workspace');

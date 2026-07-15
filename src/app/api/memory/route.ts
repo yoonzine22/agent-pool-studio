@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger'
 import { validateSchema, extractWikiLinks } from '@/lib/memory-utils'
 import { MEMORY_PATH, MEMORY_ALLOWED_PREFIXES, isPathAllowed, resolveSafeMemoryPath } from '@/lib/memory-path'
 import { searchMemory, indexFile, removeFromIndex } from '@/lib/memory-search'
+import { resolveWorkspaceMemoryAccess } from '@/lib/workspace-isolation'
 
 // Ensure memory directory exists on startup
 if (MEMORY_PATH && !existsSync(MEMORY_PATH)) {
@@ -89,6 +90,9 @@ export async function GET(request: NextRequest) {
   const rateCheck = readLimiter(request)
   if (rateCheck) return rateCheck
 
+  const memoryAccess = resolveWorkspaceMemoryAccess(auth.user)
+  const memoryPath = memoryAccess?.root || ''
+
   try {
     const { searchParams } = new URL(request.url)
     const path = searchParams.get('path')
@@ -98,14 +102,14 @@ export async function GET(request: NextRequest) {
 
     if (action === 'tree') {
       // Return the file tree
-      if (!MEMORY_PATH) {
+      if (!memoryPath || !existsSync(memoryPath)) {
         return NextResponse.json({ tree: [] })
       }
       if (path) {
         if (!isPathAllowed(path)) {
           return NextResponse.json({ error: 'Path not allowed' }, { status: 403 })
         }
-        const fullPath = await resolveSafeMemoryPath(MEMORY_PATH, path)
+        const fullPath = await resolveSafeMemoryPath(memoryPath, path)
         const stats = await stat(fullPath).catch(() => null)
         if (!stats?.isDirectory()) {
           return NextResponse.json({ error: 'Directory not found' }, { status: 404 })
@@ -117,7 +121,7 @@ export async function GET(request: NextRequest) {
         const tree: MemoryFile[] = []
         for (const prefix of MEMORY_ALLOWED_PREFIXES) {
           const folder = prefix.replace(/\/$/, '')
-          const fullPath = join(MEMORY_PATH, folder)
+          const fullPath = join(memoryPath, folder)
           if (!existsSync(fullPath)) continue
           try {
             const stats = await stat(fullPath)
@@ -135,7 +139,7 @@ export async function GET(request: NextRequest) {
         }
         return NextResponse.json({ tree })
       }
-      const tree = await buildFileTree(MEMORY_PATH, '', maxDepth)
+      const tree = await buildFileTree(memoryPath, '', maxDepth)
       return NextResponse.json({ tree })
     }
 
@@ -144,10 +148,10 @@ export async function GET(request: NextRequest) {
       if (!isPathAllowed(path)) {
         return NextResponse.json({ error: 'Path not allowed' }, { status: 403 })
       }
-      if (!MEMORY_PATH) {
+      if (!memoryPath || !existsSync(memoryPath)) {
         return NextResponse.json({ error: 'Memory directory not configured' }, { status: 500 })
       }
-      const fullPath = await resolveSafeMemoryPath(MEMORY_PATH, path)
+      const fullPath = await resolveSafeMemoryPath(memoryPath, path)
       
       try {
         const content = await readFile(fullPath, 'utf-8')
@@ -176,12 +180,12 @@ export async function GET(request: NextRequest) {
       if (!query) {
         return NextResponse.json({ error: 'Query required' }, { status: 400 })
       }
-      if (!MEMORY_PATH) {
+      if (!memoryPath || !existsSync(memoryPath)) {
         return NextResponse.json({ query, results: [] })
       }
 
       // FTS5-powered full-text search with BM25 ranking and snippets
-      const response = await searchMemory(MEMORY_PATH, MEMORY_ALLOWED_PREFIXES, query)
+      const response = await searchMemory(memoryPath, MEMORY_ALLOWED_PREFIXES, query, { scope: memoryAccess!.scope })
       return NextResponse.json(response)
     }
 
@@ -199,6 +203,9 @@ export async function POST(request: NextRequest) {
   const rateCheck = mutationLimiter(request)
   if (rateCheck) return rateCheck
 
+  const memoryAccess = resolveWorkspaceMemoryAccess(auth.user)
+  const memoryPath = memoryAccess?.root || ''
+
   try {
     const body = await request.json()
     const { action, path, content } = body
@@ -210,10 +217,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Path not allowed' }, { status: 403 })
     }
 
-    if (!MEMORY_PATH) {
+    if (!memoryPath) {
       return NextResponse.json({ error: 'Memory directory not configured' }, { status: 500 })
     }
-    const fullPath = await resolveSafeMemoryPath(MEMORY_PATH, path)
+    await mkdir(memoryPath, { recursive: true })
+    const fullPath = await resolveSafeMemoryPath(memoryPath, path)
 
     if (action === 'save') {
       // Save file content
@@ -227,7 +235,7 @@ export async function POST(request: NextRequest) {
 
       await writeFile(fullPath, content, 'utf-8')
       // Incrementally update FTS index
-      try { indexFile(getDatabase(), MEMORY_PATH, path) } catch { /* best-effort */ }
+      try { indexFile(getDatabase(), memoryPath, path, memoryAccess!.scope) } catch { /* best-effort */ }
       try {
         db_helpers.logActivity('memory_file_saved', 'memory', 0, auth.user.username || 'unknown', `Updated ${path}`, { path, size: content.length })
       } catch { /* best-effort */ }
@@ -258,7 +266,7 @@ export async function POST(request: NextRequest) {
       }
 
       await writeFile(fullPath, content || '', 'utf-8')
-      try { indexFile(getDatabase(), MEMORY_PATH, path) } catch { /* best-effort */ }
+      try { indexFile(getDatabase(), memoryPath, path, memoryAccess!.scope) } catch { /* best-effort */ }
       try {
         db_helpers.logActivity('memory_file_created', 'memory', 0, auth.user.username || 'unknown', `Created ${path}`, { path })
       } catch { /* best-effort */ }
@@ -279,6 +287,9 @@ export async function DELETE(request: NextRequest) {
   const rateCheck = mutationLimiter(request)
   if (rateCheck) return rateCheck
 
+  const memoryAccess = resolveWorkspaceMemoryAccess(auth.user)
+  const memoryPath = memoryAccess?.root || ''
+
   try {
     const body = await request.json()
     const { action, path } = body
@@ -290,10 +301,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Path not allowed' }, { status: 403 })
     }
 
-    if (!MEMORY_PATH) {
+    if (!memoryPath || !existsSync(memoryPath)) {
       return NextResponse.json({ error: 'Memory directory not configured' }, { status: 500 })
     }
-    const fullPath = await resolveSafeMemoryPath(MEMORY_PATH, path)
+    const fullPath = await resolveSafeMemoryPath(memoryPath, path)
 
     if (action === 'delete') {
       // Check if file exists
@@ -304,7 +315,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       await unlink(fullPath)
-      try { removeFromIndex(getDatabase(), path) } catch { /* best-effort */ }
+      try { removeFromIndex(getDatabase(), path, memoryAccess!.scope) } catch { /* best-effort */ }
       try {
         db_helpers.logActivity('memory_file_deleted', 'memory', 0, auth.user.username || 'unknown', `Deleted ${path}`, { path })
       } catch { /* best-effort */ }

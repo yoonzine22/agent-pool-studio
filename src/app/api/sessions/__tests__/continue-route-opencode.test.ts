@@ -9,6 +9,10 @@ vi.mock('@/lib/auth', () => ({
   requireRole: vi.fn(() => ({ user: { role: 'operator', username: 'tester' } })),
 }))
 
+vi.mock('@/lib/workspace-isolation', () => ({
+  denyUnscopedResourceForStrictWorkspace: vi.fn(() => null),
+}))
+
 vi.mock('@/lib/command', () => ({
   runCommand: mocks.runCommand,
 }))

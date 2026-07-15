@@ -9,6 +9,7 @@ import { requireRole } from '@/lib/auth'
 import { callOpenClawGateway } from '@/lib/openclaw-gateway'
 import { mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+import { denyUnscopedResourceForStrictWorkspace } from '@/lib/workspace-isolation'
 
 // Upstream default 90 minutes was too lax (every recently-touched jsonl
 // stayed "active"); 2 minutes was too tight. 15 minutes matches the
@@ -18,6 +19,8 @@ const LOCAL_SESSION_ACTIVE_WINDOW_MS = 15 * 60 * 1000
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDenied = denyUnscopedResourceForStrictWorkspace(auth.user, 'local_sessions', new URL(request.url).pathname)
+  if (isolationDenied) return isolationDenied
 
   try {
     const gatewaySessions = getAllGatewaySessions()
@@ -51,6 +54,8 @@ const SESSION_KEY_RE = /^[a-zA-Z0-9:_.-]+$/
 export async function POST(request: NextRequest) {
   const auth = requireRole(request, 'operator')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDenied = denyUnscopedResourceForStrictWorkspace(auth.user, 'gateway_sessions', new URL(request.url).pathname)
+  if (isolationDenied) return isolationDenied
 
   const rateCheck = mutationLimiter(request)
   if (rateCheck) return rateCheck
@@ -135,6 +140,8 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = requireRole(request, 'operator')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const isolationDenied = denyUnscopedResourceForStrictWorkspace(auth.user, 'gateway_sessions', new URL(request.url).pathname)
+  if (isolationDenied) return isolationDenied
 
   const rateCheck = mutationLimiter(request)
   if (rateCheck) return rateCheck

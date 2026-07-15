@@ -4,7 +4,8 @@ import { readLimiter } from '@/lib/rate-limit'
 import { buildLinkGraph, extractWikiLinks } from '@/lib/memory-utils'
 import { readFile } from 'fs/promises'
 import { logger } from '@/lib/logger'
-import { MEMORY_PATH, isPathAllowed, resolveSafeMemoryPath } from '@/lib/memory-path'
+import { isPathAllowed, resolveSafeMemoryPath } from '@/lib/memory-path'
+import { resolveWorkspaceMemoryAccess } from '@/lib/workspace-isolation'
 
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
@@ -13,7 +14,8 @@ export async function GET(request: NextRequest) {
   const limited = readLimiter(request)
   if (limited) return limited
 
-  if (!MEMORY_PATH) {
+  const memoryAccess = resolveWorkspaceMemoryAccess(auth.user)
+  if (!memoryAccess) {
     return NextResponse.json({ error: 'Memory directory not configured' }, { status: 500 })
   }
 
@@ -25,12 +27,12 @@ export async function GET(request: NextRequest) {
       if (!isPathAllowed(filePath)) {
         return NextResponse.json({ error: 'Path not allowed' }, { status: 403 })
       }
-      const fullPath = await resolveSafeMemoryPath(MEMORY_PATH, filePath)
+      const fullPath = await resolveSafeMemoryPath(memoryAccess.root, filePath)
       const content = await readFile(fullPath, 'utf-8')
       const links = extractWikiLinks(content)
 
       // Also find backlinks from the full graph
-      const graph = await buildLinkGraph(MEMORY_PATH)
+      const graph = await buildLinkGraph(memoryAccess.root)
       const node = graph.nodes[filePath]
       const incoming = node?.incoming ?? []
       const outgoing = node?.outgoing ?? []
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Return full link graph
-    const graph = await buildLinkGraph(MEMORY_PATH)
+    const graph = await buildLinkGraph(memoryAccess.root)
 
     // Serialize for the frontend (strip wikiLinks detail for the full graph)
     const nodes = Object.values(graph.nodes).map((n) => ({
