@@ -419,7 +419,7 @@ export function NavRail() {
         {sidebarExpanded && (
           <div className="px-2 pb-2 space-y-2 shrink-0">
             <a
-              href="https://x.com/nyk_builderz/status/2022996371922649192?s=20"
+              href="https://x.com/nykdotdev/status/2022996371922649192?s=20"
               target="_blank"
               rel="noopener noreferrer"
               className="block rounded-lg border border-border/50 bg-surface-1 hover:bg-surface-2 hover:border-primary/30 transition-all duration-200 p-2 group"
@@ -450,7 +450,7 @@ export function NavRail() {
           <div className="px-3 pb-1">
             <p className="text-[10px] text-muted-foreground/30 text-center">
               Built with care by{' '}
-              <a href="https://x.com/nyk_builderz" target="_blank" rel="noopener noreferrer" className="text-muted-foreground/50 hover:text-primary transition-colors">
+              <a href="https://x.com/nykdotdev" target="_blank" rel="noopener noreferrer" className="text-muted-foreground/50 hover:text-primary transition-colors">
                 nyk
               </a>
             </p>
