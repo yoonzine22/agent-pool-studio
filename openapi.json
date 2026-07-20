@@ -93,6 +93,10 @@
       "description": "Release and version checking"
     },
     {
+      "name": "Agent Studio",
+      "description": "Visual agent, team, workflow, run, and runtime orchestration"
+    },
+    {
       "name": "Docs",
       "description": "API documentation"
     }
@@ -11804,6 +11808,342 @@
           "500": { "$ref": "#/components/responses/InternalServerError" }
         }
       }
+    },
+    "/api/studio/agents": {
+      "get": {
+        "tags": ["Agent Studio"],
+        "summary": "List Agent Studio agents",
+        "description": "Lists Agent Studio agents in the authenticated workspace. Requires viewer role or higher.",
+        "operationId": "listStudioAgents",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio agents",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioAgentListResponse"}}}
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Agent Studio"],
+        "summary": "Create an Agent Studio agent",
+        "description": "Creates an Agent Studio agent in the authenticated workspace. Requires operator role or higher.",
+        "operationId": "createStudioAgent",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioAgentCreate"}}}
+        },
+        "responses": {
+          "201": {
+            "description": "Agent Studio agent created",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioAgentResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "409": {"description": "Agent name already exists", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/InternalServerError"},
+          "503": {"description": "Agent Studio workspace root configuration is unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/api/studio/agents/{id}": {
+      "delete": {
+        "tags": ["Agent Studio"],
+        "summary": "Delete an Agent Studio agent",
+        "description": "Deletes an Agent Studio agent in the authenticated workspace. Requires admin role.",
+        "operationId": "deleteStudioAgent",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "description": "Numeric Agent Studio agent ID.", "schema": {"type": "integer"}}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio agent deleted",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioSuccessResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"description": "Agent is referenced by a saved workflow", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/InternalServerError"}
+        }
+      }
+    },
+    "/api/studio/teams": {
+      "get": {
+        "tags": ["Agent Studio"],
+        "summary": "List Agent Studio teams",
+        "description": "Lists Agent Studio teams in the authenticated workspace. Requires viewer role or higher.",
+        "operationId": "listStudioTeams",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio teams",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioTeamListResponse"}}}
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Agent Studio"],
+        "summary": "Create an Agent Studio team",
+        "description": "Creates an Agent Studio team in the authenticated workspace. Requires operator role or higher.",
+        "operationId": "createStudioTeam",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioTeamWrite"}}}
+        },
+        "responses": {
+          "201": {
+            "description": "Agent Studio team created",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioTeamResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "409": {"description": "Team name already exists or is referenced by a workflow", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/InternalServerError"}
+        }
+      }
+    },
+    "/api/studio/teams/{id}": {
+      "put": {
+        "tags": ["Agent Studio"],
+        "summary": "Update an Agent Studio team",
+        "description": "Replaces an Agent Studio team in the authenticated workspace. Requires operator role or higher.",
+        "operationId": "updateStudioTeam",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "description": "Numeric Agent Studio team ID.", "schema": {"type": "integer"}}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioTeamWrite"}}}
+        },
+        "responses": {
+          "200": {
+            "description": "Agent Studio team updated",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioTeamResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "409": {"description": "Team name already exists or is referenced by a workflow", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/InternalServerError"}
+        }
+      },
+      "delete": {
+        "tags": ["Agent Studio"],
+        "summary": "Delete an Agent Studio team",
+        "description": "Deletes an Agent Studio team in the authenticated workspace. Requires admin role.",
+        "operationId": "deleteStudioTeam",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "description": "Numeric Agent Studio team ID.", "schema": {"type": "integer"}}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio team deleted",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioSuccessResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"description": "Team is referenced by a workflow", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/InternalServerError"}
+        }
+      }
+    },
+    "/api/studio/workflows": {
+      "get": {
+        "tags": ["Agent Studio"],
+        "summary": "List Agent Studio workflows",
+        "description": "Lists Agent Studio workflows in the authenticated workspace. Requires viewer role or higher.",
+        "operationId": "listStudioWorkflows",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio workflows",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioWorkflowListResponse"}}}
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Agent Studio"],
+        "summary": "Create an Agent Studio workflow",
+        "description": "Creates an Agent Studio workflow in the authenticated workspace. Requires operator role or higher.",
+        "operationId": "createStudioWorkflow",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioWorkflowWrite"}}}
+        },
+        "responses": {
+          "201": {
+            "description": "Agent Studio workflow created",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioWorkflowResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "409": {"description": "Workflow name already exists", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/InternalServerError"}
+        }
+      }
+    },
+    "/api/studio/workflows/{id}": {
+      "put": {
+        "tags": ["Agent Studio"],
+        "summary": "Update an Agent Studio workflow",
+        "description": "Replaces an Agent Studio workflow in the authenticated workspace. Requires operator role or higher.",
+        "operationId": "updateStudioWorkflow",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "description": "Numeric Agent Studio workflow ID.", "schema": {"type": "integer"}}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioWorkflowWrite"}}}
+        },
+        "responses": {
+          "200": {
+            "description": "Agent Studio workflow updated",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioWorkflowResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "409": {"description": "Workflow name already exists", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/InternalServerError"}
+        }
+      },
+      "delete": {
+        "tags": ["Agent Studio"],
+        "summary": "Delete an Agent Studio workflow",
+        "description": "Deletes an Agent Studio workflow in the authenticated workspace. Requires admin role.",
+        "operationId": "deleteStudioWorkflow",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "description": "Numeric Agent Studio workflow ID.", "schema": {"type": "integer"}}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio workflow deleted",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioSuccessResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"description": "Workflow has persisted run history", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/InternalServerError"}
+        }
+      }
+    },
+    "/api/studio/runs": {
+      "get": {
+        "tags": ["Agent Studio"],
+        "summary": "List Agent Studio runs",
+        "description": "Lists the latest Agent Studio runs in the authenticated workspace. Requires viewer role or higher.",
+        "operationId": "listStudioRuns",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio runs",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioRunListResponse"}}}
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Agent Studio"],
+        "summary": "Start an Agent Studio run",
+        "description": "Queues a run of an Agent Studio workflow in the authenticated workspace. Requires operator role or higher.",
+        "operationId": "createStudioRun",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioRunCreate"}}}
+        },
+        "responses": {
+          "202": {
+            "description": "Agent Studio run queued",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioRunResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "429": {"$ref": "#/components/responses/RateLimited"}
+        }
+      }
+    },
+    "/api/studio/runs/{id}": {
+      "get": {
+        "tags": ["Agent Studio"],
+        "summary": "Get an Agent Studio run",
+        "description": "Returns an Agent Studio run and its event history in the authenticated workspace. Requires viewer role or higher.",
+        "operationId": "getStudioRun",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "description": "Numeric Agent Studio run ID.", "schema": {"type": "integer"}}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio run details",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioRunDetailResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/api/studio/runs/{id}/action": {
+      "post": {
+        "tags": ["Agent Studio"],
+        "summary": "Approve or cancel an Agent Studio run",
+        "description": "Applies an approval or cancellation action to an Agent Studio run. Requires operator role or higher.",
+        "operationId": "actOnStudioRun",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "description": "Numeric Agent Studio run ID.", "schema": {"type": "integer"}}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioRunAction"}}}
+        },
+        "responses": {
+          "200": {
+            "description": "Agent Studio run action accepted",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioSuccessResponse"}}}
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"description": "Run action lost a state transition race or is not valid for the current status", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"$ref": "#/components/responses/RateLimited"}
+        }
+      }
+    },
+    "/api/studio/runtimes": {
+      "get": {
+        "tags": ["Agent Studio"],
+        "summary": "Get Agent Studio runtime readiness",
+        "description": "Reports whether the Codex and Antigravity command-line runtimes are available. Requires viewer role or higher.",
+        "operationId": "getStudioRuntimes",
+        "security": [{"sessionCookie": []}, {"apiKey": []}],
+        "responses": {
+          "200": {
+            "description": "Agent Studio runtime readiness",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StudioRuntimeListResponse"}}}
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "500": {"$ref": "#/components/responses/InternalServerError"},
+          "503": {"description": "Agent Studio workspace root configuration is unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
     }
   },
   "components": {
@@ -12152,6 +12492,286 @@
           }
         }
       },
+      "StudioRuntime": {
+        "type": "string",
+        "enum": ["codex", "antigravity"]
+      },
+      "StudioAgentCreate": {
+        "type": "object",
+        "required": ["name", "role", "runtime", "instructions", "workspacePath"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 100},
+          "role": {"type": "string", "minLength": 1, "maxLength": 100},
+          "runtime": {"$ref": "#/components/schemas/StudioRuntime"},
+          "instructions": {"type": "string", "maxLength": 20000},
+          "model": {"type": "string", "minLength": 1, "maxLength": 100, "nullable": true},
+          "workspacePath": {"type": "string", "minLength": 1, "maxLength": 1000}
+        }
+      },
+      "StudioAgent": {
+        "type": "object",
+        "required": ["id", "name", "role", "runtime", "instructions", "model", "workspacePath", "status", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "name": {"type": "string"},
+          "role": {"type": "string"},
+          "runtime": {"$ref": "#/components/schemas/StudioRuntime"},
+          "instructions": {"type": "string"},
+          "model": {"type": "string", "nullable": true},
+          "workspacePath": {"type": "string"},
+          "status": {"type": "string"},
+          "createdAt": {"type": "string", "format": "date-time"},
+          "updatedAt": {"type": "string", "format": "date-time"}
+        }
+      },
+      "StudioAgentListResponse": {
+        "type": "object",
+        "required": ["agents"],
+        "properties": {"agents": {"type": "array", "items": {"$ref": "#/components/schemas/StudioAgent"}}}
+      },
+      "StudioAgentResponse": {
+        "type": "object",
+        "required": ["agent"],
+        "properties": {"agent": {"$ref": "#/components/schemas/StudioAgent"}}
+      },
+      "StudioTeamWrite": {
+        "type": "object",
+        "required": ["name", "description", "agentIds"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 100},
+          "description": {"type": "string", "maxLength": 2000},
+          "agentIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}}
+        }
+      },
+      "StudioTeam": {
+        "type": "object",
+        "required": ["id", "workspaceId", "name", "description", "agentIds", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "workspaceId": {"type": "integer", "minimum": 1},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "agentIds": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+          "createdAt": {"type": "string", "format": "date-time"},
+          "updatedAt": {"type": "string", "format": "date-time"}
+        }
+      },
+      "StudioTeamListResponse": {
+        "type": "object",
+        "required": ["teams"],
+        "properties": {"teams": {"type": "array", "items": {"$ref": "#/components/schemas/StudioTeam"}}}
+      },
+      "StudioTeamResponse": {
+        "type": "object",
+        "required": ["team"],
+        "properties": {"team": {"$ref": "#/components/schemas/StudioTeam"}}
+      },
+      "StudioWorkflowNodeBase": {
+        "type": "object",
+        "required": ["id", "label", "position"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 100},
+          "label": {"type": "string", "minLength": 1, "maxLength": 100},
+          "position": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {"x": {"type": "number"}, "y": {"type": "number"}}
+          }
+        }
+      },
+      "StudioWorkflowStartNode": {
+        "allOf": [
+          {"$ref": "#/components/schemas/StudioWorkflowNodeBase"},
+          {"type": "object", "required": ["kind"], "properties": {"kind": {"enum": ["start"]}}}
+        ]
+      },
+      "StudioWorkflowAgentNode": {
+        "allOf": [
+          {"$ref": "#/components/schemas/StudioWorkflowNodeBase"},
+          {
+            "type": "object",
+            "required": ["kind", "agentId", "prompt"],
+            "properties": {
+              "kind": {"enum": ["agent"]},
+              "agentId": {"type": "integer", "minimum": 1},
+              "prompt": {"type": "string", "minLength": 1, "maxLength": 20000}
+            }
+          }
+        ]
+      },
+      "StudioWorkflowApprovalNode": {
+        "allOf": [
+          {"$ref": "#/components/schemas/StudioWorkflowNodeBase"},
+          {"type": "object", "required": ["kind"], "properties": {"kind": {"enum": ["approval"]}}}
+        ]
+      },
+      "StudioWorkflowFinishNode": {
+        "allOf": [
+          {"$ref": "#/components/schemas/StudioWorkflowNodeBase"},
+          {"type": "object", "required": ["kind"], "properties": {"kind": {"enum": ["finish"]}}}
+        ]
+      },
+      "StudioWorkflowNode": {
+        "oneOf": [
+          {"$ref": "#/components/schemas/StudioWorkflowStartNode"},
+          {"$ref": "#/components/schemas/StudioWorkflowAgentNode"},
+          {"$ref": "#/components/schemas/StudioWorkflowApprovalNode"},
+          {"$ref": "#/components/schemas/StudioWorkflowFinishNode"}
+        ]
+      },
+      "StudioWorkflowEdge": {
+        "type": "object",
+        "required": ["id", "source", "target"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 100},
+          "source": {"type": "string", "minLength": 1, "maxLength": 100},
+          "target": {"type": "string", "minLength": 1, "maxLength": 100}
+        }
+      },
+      "StudioWorkflowWrite": {
+        "type": "object",
+        "required": ["name", "description", "teamId", "nodes", "edges"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 100},
+          "description": {"type": "string", "maxLength": 2000},
+          "teamId": {"type": "integer", "minimum": 1, "nullable": true},
+          "nodes": {"type": "array", "minItems": 2, "maxItems": 100, "items": {"$ref": "#/components/schemas/StudioWorkflowNode"}},
+          "edges": {"type": "array", "minItems": 1, "maxItems": 250, "items": {"$ref": "#/components/schemas/StudioWorkflowEdge"}}
+        }
+      },
+      "StudioWorkflow": {
+        "type": "object",
+        "required": ["id", "workspaceId", "teamId", "name", "description", "nodes", "edges", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "workspaceId": {"type": "integer", "minimum": 1},
+          "teamId": {"type": "integer", "minimum": 1, "nullable": true},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "nodes": {"type": "array", "maxItems": 100, "items": {"$ref": "#/components/schemas/StudioWorkflowNode"}},
+          "edges": {"type": "array", "maxItems": 250, "items": {"$ref": "#/components/schemas/StudioWorkflowEdge"}},
+          "createdAt": {"type": "string", "format": "date-time"},
+          "updatedAt": {"type": "string", "format": "date-time"}
+        }
+      },
+      "StudioWorkflowListResponse": {
+        "type": "object",
+        "required": ["workflows"],
+        "properties": {"workflows": {"type": "array", "items": {"$ref": "#/components/schemas/StudioWorkflow"}}}
+      },
+      "StudioWorkflowResponse": {
+        "type": "object",
+        "required": ["workflow"],
+        "properties": {"workflow": {"$ref": "#/components/schemas/StudioWorkflow"}}
+      },
+      "StudioNodeStatus": {
+        "type": "string",
+        "enum": ["pending", "running", "waiting_approval", "completed", "failed", "cancelled"]
+      },
+      "StudioNodeState": {
+        "type": "object",
+        "required": ["status", "output", "error"],
+        "properties": {
+          "status": {"$ref": "#/components/schemas/StudioNodeStatus"},
+          "output": {"type": "string", "nullable": true},
+          "error": {"type": "string", "nullable": true}
+        }
+      },
+      "StudioNodeStates": {
+        "type": "object",
+        "additionalProperties": {"$ref": "#/components/schemas/StudioNodeState"}
+      },
+      "StudioRunStatus": {
+        "type": "string",
+        "enum": ["pending", "running", "waiting_approval", "completed", "failed", "cancelled"]
+      },
+      "StudioRun": {
+        "type": "object",
+        "required": ["id", "workspaceId", "workflowId", "workflowName", "status", "input", "nodeStates", "requestedBy", "error", "startedAt", "completedAt", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "workspaceId": {"type": "integer", "minimum": 1},
+          "workflowId": {"type": "integer", "minimum": 1},
+          "workflowName": {"type": "string"},
+          "status": {"$ref": "#/components/schemas/StudioRunStatus"},
+          "input": {"type": "string"},
+          "nodeStates": {"$ref": "#/components/schemas/StudioNodeStates"},
+          "requestedBy": {"type": "string"},
+          "error": {"type": "string", "nullable": true},
+          "startedAt": {"type": "string", "format": "date-time", "nullable": true},
+          "completedAt": {"type": "string", "format": "date-time", "nullable": true},
+          "createdAt": {"type": "string", "format": "date-time"},
+          "updatedAt": {"type": "string", "format": "date-time"}
+        }
+      },
+      "StudioRunEvent": {
+        "type": "object",
+        "required": ["id", "runId", "nodeId", "eventType", "message", "data", "createdAt"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "runId": {"type": "integer", "minimum": 1},
+          "nodeId": {"type": "string", "nullable": true},
+          "eventType": {"type": "string"},
+          "message": {"type": "string"},
+          "data": {"type": "object", "additionalProperties": true, "nullable": true},
+          "createdAt": {"type": "string", "format": "date-time"}
+        }
+      },
+      "StudioRunCreate": {
+        "type": "object",
+        "required": ["workflowId"],
+        "properties": {
+          "workflowId": {"type": "integer", "minimum": 1},
+          "input": {"type": "string", "maxLength": 20000, "default": ""}
+        }
+      },
+      "StudioRunAction": {
+        "type": "object",
+        "required": ["action"],
+        "properties": {"action": {"type": "string", "enum": ["approve", "cancel"]}}
+      },
+      "StudioRunListResponse": {
+        "type": "object",
+        "required": ["runs"],
+        "properties": {"runs": {"type": "array", "items": {"$ref": "#/components/schemas/StudioRun"}}}
+      },
+      "StudioRunResponse": {
+        "type": "object",
+        "required": ["run"],
+        "properties": {"run": {"$ref": "#/components/schemas/StudioRun"}}
+      },
+      "StudioRunDetailResponse": {
+        "type": "object",
+        "required": ["run", "events"],
+        "properties": {
+          "run": {"$ref": "#/components/schemas/StudioRun"},
+          "events": {"type": "array", "items": {"$ref": "#/components/schemas/StudioRunEvent"}}
+        }
+      },
+      "StudioRuntimeReadiness": {
+        "type": "object",
+        "required": ["runtime", "available", "command", "version", "detail"],
+        "properties": {
+          "runtime": {"$ref": "#/components/schemas/StudioRuntime"},
+          "available": {"type": "boolean"},
+          "command": {"type": "string"},
+          "version": {"type": "string", "nullable": true},
+          "detail": {"type": "string"}
+        }
+      },
+      "StudioRuntimeListResponse": {
+        "type": "object",
+        "required": ["runtimes", "workspacePath"],
+        "properties": {
+          "runtimes": {"type": "array", "items": {"$ref": "#/components/schemas/StudioRuntimeReadiness"}},
+          "workspacePath": {"type": "string"}
+        }
+      },
+      "StudioSuccessResponse": {
+        "type": "object",
+        "required": ["success"],
+        "properties": {"success": {"type": "boolean", "const": true}}
+      },
       "Project": {
         "type": "object",
         "properties": {
@@ -12174,6 +12794,16 @@
       }
     },
     "responses": {
+      "Error": {
+        "description": "Request failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
       "BadRequest": {
         "description": "Invalid request",
         "content": {
@@ -12216,6 +12846,16 @@
       },
       "RateLimited": {
         "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal server error",
         "content": {
           "application/json": {
             "schema": {

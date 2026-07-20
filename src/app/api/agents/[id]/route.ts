@@ -7,6 +7,8 @@ import { eventBus } from '@/lib/event-bus'
 import { logger } from '@/lib/logger'
 import { runOpenClaw } from '@/lib/command'
 import { config as appConfig } from '@/lib/config'
+import { deleteStudioAgent } from '@/lib/studio/agent-store'
+import { studioMutationError } from '@/lib/studio/http'
 
 /**
  * GET /api/agents/[id] - Get a single agent by ID or name
@@ -243,6 +245,22 @@ export async function DELETE(
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
+    if (agent.source === 'agent-studio') {
+      const deleted = deleteStudioAgent(db, workspaceId, agent.id)
+      if (!deleted) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+      db_helpers.logActivity(
+        'agent_deleted',
+        'agent',
+        agent.id,
+        auth.user.username,
+        `Deleted Agent Studio agent: ${agent.name}`,
+        { name: agent.name, role: agent.role, remove_workspace: false },
+        workspaceId,
+      )
+      eventBus.broadcast('agent.deleted', { id: agent.id, name: agent.name, workspace_id: workspaceId })
+      return NextResponse.json({ success: true, deleted: agent.name, remove_workspace: false })
+    }
+
     if (removeWorkspace) {
       const agentConfig = agent.config ? JSON.parse(agent.config) : {}
       const openclawId =
@@ -297,6 +315,6 @@ export async function DELETE(
     })
   } catch (error) {
     logger.error({ err: error }, 'DELETE /api/agents/[id] error')
-    return NextResponse.json({ error: 'Failed to delete agent' }, { status: 500 })
+    return studioMutationError(error, 'Failed to delete agent')
   }
 }

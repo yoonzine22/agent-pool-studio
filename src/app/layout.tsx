@@ -53,8 +53,8 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Mission Control — AI Agent Orchestration Dashboard',
-  description: 'Open-source dashboard for AI agent orchestration. Manage agent fleets, dispatch tasks, track costs, and coordinate multi-agent workflows. Self-hosted, zero dependencies, SQLite-powered.',
+  title: 'Agent Pool Studio — Codex & Antigravity Orchestration',
+  description: 'Build Codex and Antigravity agent teams, design visual workflows, and supervise local multi-agent runs.',
   metadataBase,
   icons: {
     icon: [
@@ -65,22 +65,22 @@ export const metadata: Metadata = {
     shortcut: ['/icon.png'],
   },
   openGraph: {
-    title: 'Mission Control — AI Agent Orchestration Dashboard',
-    description: 'Open-source dashboard for AI agent orchestration. Manage agent fleets, dispatch tasks, track costs, and coordinate multi-agent workflows.',
-    images: [{ url: '/brand/mc-logo-512.png', width: 512, height: 512, alt: 'Mission Control — open-source AI agent orchestration dashboard' }],
+    title: 'Agent Pool Studio — Codex & Antigravity Orchestration',
+    description: 'Build Codex and Antigravity agent teams, design visual workflows, and supervise local multi-agent runs.',
+    images: [{ url: '/brand/mc-logo-512.png', width: 512, height: 512, alt: 'Agent Pool Studio — Codex and Antigravity orchestration' }],
     type: 'website',
-    siteName: 'Mission Control',
+    siteName: 'Agent Pool Studio',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Mission Control — AI Agent Orchestration Dashboard',
-    description: 'Open-source dashboard for AI agent orchestration. Manage agent fleets, dispatch tasks, track costs, and coordinate multi-agent workflows.',
+    title: 'Agent Pool Studio — Codex & Antigravity Orchestration',
+    description: 'Build Codex and Antigravity agent teams, design visual workflows, and supervise local multi-agent runs.',
     images: ['/brand/mc-logo-512.png'],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Mission Control',
+    title: 'Agent Pool Studio',
   },
 }
 

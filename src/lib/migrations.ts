@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import type Database from 'better-sqlite3'
+import { agentStudioMigrations } from './studio/migrations'
 
 export type Migration = {
   id: string
@@ -1550,7 +1551,7 @@ export function runMigrations(db: Database.Database) {
     db.prepare('SELECT id FROM schema_migrations').all().map((row: any) => row.id)
   )
 
-  for (const migration of [...migrations, ...extraMigrations]) {
+  for (const migration of [...migrations, ...agentStudioMigrations, ...extraMigrations]) {
     if (applied.has(migration.id)) continue
     const restoreForeignKeys = migration.foreignKeysOff
       && db.pragma('foreign_keys', { simple: true }) === 1

@@ -5,6 +5,7 @@ const requireRole = vi.fn()
 const runOpenClaw = vi.fn()
 const removeAgentFromConfig = vi.fn()
 const prepare = vi.fn()
+const deleteStudioAgent = vi.fn()
 
 vi.mock('@/lib/auth', () => ({
   requireRole,
@@ -42,12 +43,17 @@ vi.mock('@/lib/logger', () => ({
   },
 }))
 
+vi.mock('@/lib/studio/agent-store', () => ({
+  deleteStudioAgent,
+}))
+
 describe('DELETE /api/agents/[id]', () => {
   beforeEach(() => {
     vi.resetModules()
     requireRole.mockReturnValue({ user: { id: 1, username: 'admin', role: 'admin', workspace_id: 1 } })
     runOpenClaw.mockReset()
     removeAgentFromConfig.mockReset()
+    deleteStudioAgent.mockReset()
     prepare.mockReset()
   })
 
@@ -131,5 +137,33 @@ describe('DELETE /api/agents/[id]', () => {
     expect(deleteStmt.run).toHaveBeenCalledWith(9, 1)
     expect(body.success).toBe(true)
     expect(body.warning).toContain('OpenClaw config cleanup skipped')
+  })
+
+  it('routes Agent Studio agents through the workflow reference guard', async () => {
+    const agent = {
+      id: 10,
+      name: 'studio-builder',
+      role: 'builder',
+      source: 'agent-studio',
+      config: '{}',
+    }
+    const selectStmt = { get: vi.fn(() => agent) }
+    prepare.mockImplementation((sql: string) => {
+      if (sql.startsWith('SELECT * FROM agents')) return selectStmt
+      throw new Error(`Unexpected SQL: ${sql}`)
+    })
+    deleteStudioAgent.mockImplementation(() => {
+      throw new Error('Cannot delete agent 10: saved workflow 2 references this agent')
+    })
+
+    const { DELETE } = await import('@/app/api/agents/[id]/route')
+    const request = new NextRequest('http://localhost/api/agents/10', { method: 'DELETE' })
+    const response = await DELETE(request, { params: Promise.resolve({ id: '10' }) })
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(deleteStudioAgent).toHaveBeenCalledWith(expect.anything(), 1, 10)
+    expect(removeAgentFromConfig).not.toHaveBeenCalled()
+    expect(body.error).toContain('saved workflow 2')
   })
 })

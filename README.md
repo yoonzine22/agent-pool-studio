@@ -1,14 +1,18 @@
 <div align="center">
 
-# Mission Control
+# Agent Pool Studio
 
-Self-hosted control plane for operating AI agents.
+Self-hosted command deck for building and operating Codex and Antigravity agent teams.
 
 Dispatch tasks, inspect runs, review failures, track spend, and coordinate agent runtimes
 from one local dashboard backed by SQLite.
 
-[![Quality Gate](https://github.com/builderz-labs/mission-control/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/builderz-labs/mission-control/actions/workflows/quality-gate.yml)
-[![Release](https://img.shields.io/github/v/release/builderz-labs/mission-control)](https://github.com/builderz-labs/mission-control/releases)
+Agent Pool Studio is this fork's focused Studio experience, built on [Mission Control by
+Builderz Labs](https://github.com/builderz-labs/mission-control). Upstream documentation,
+security guidance, and license terms remain applicable.
+
+[![Quality Gate](https://github.com/yoonzine22/agent-pool-studio/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/yoonzine22/agent-pool-studio/actions/workflows/quality-gate.yml)
+[![Release](https://img.shields.io/github/v/release/yoonzine22/agent-pool-studio)](https://github.com/yoonzine22/agent-pool-studio/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 <img src="docs/mission-control-overview.png" alt="Mission Control overview dashboard with active sessions, live activity, fleet status per runtime, and the task pipeline" width="900">
@@ -19,13 +23,68 @@ from one local dashboard backed by SQLite.
 > Mission Control is alpha software. APIs, schemas, and configuration may change between
 > releases. Read the [security guidance](#security-boundary) before exposing it to a network.
 
+## Agent Pool Studio quick start / 빠른 시작
+
+Use this short path to create a team and run a visual workflow (한국어로 따라 하기: 설치 →
+실행 → `/studio` 열기 → Pool → Team → Workflow → Run).
+
+Prerequisites:
+
+- Node.js **22 or newer** (`node --version`)
+- [pnpm](https://pnpm.io/installation)
+- An authenticated **Codex CLI** (`codex`) and **Antigravity CLI** (`agy`) available on `PATH`
+
+From the repository root, install and start the local server:
+
+```bash
+pnpm install
+pnpm dev
+```
+
+On the first visit, open `http://localhost:3000/setup` to create the local admin account;
+then open `http://localhost:3000/studio` (or use the Studio link in the navigation).
+
+The Studio flow is:
+
+1. **Pool** — register Codex and Antigravity runtimes.
+2. **Team** — compose a team from pool members.
+3. **Workflow** — connect the visual graph and save it.
+4. **Run** — start the workflow and monitor its timeline.
+
+For a local installation that uses the default workspace (workspace ID `1`), set one explicit
+root before starting the server. Every Studio agent workspace must be an existing directory
+inside this root:
+
+```bash
+export MC_WORKSPACE_ROOT=/absolute/path/to/your/workspaces
+export AGENT_STUDIO_CODEX_BIN=/absolute/path/to/codex
+export AGENT_STUDIO_ANTIGRAVITY_BIN=/absolute/path/to/agy
+pnpm dev
+```
+
+The two CLI path overrides are optional when `codex` and `agy` are already on `PATH`.
+`MC_WORKSPACE_ROOT` is a quick-start fallback for workspace ID `1` only.
+
+For multiple authenticated workspaces, configure an absolute root for each workspace ID with
+a JSON object:
+
+```bash
+export MC_STUDIO_WORKSPACE_ROOTS='{"1":"/srv/agent-studio/workspace-1","2":"/srv/agent-studio/workspace-2"}'
+pnpm dev
+```
+
+`MC_STUDIO_WORKSPACE_ROOTS` takes precedence over `MC_WORKSPACE_ROOT` for every mapped ID.
+Each configured root must be an existing, accessible absolute directory. A non-default
+workspace without an explicit mapping is rejected, and malformed mapping JSON fails closed;
+workspace `2`, for example, cannot use workspace `1`'s root or a symlink that resolves into it.
+
 ## Start locally
 
 Node.js 22 or newer and pnpm are required for a source install.
 
 ```bash
-git clone https://github.com/builderz-labs/mission-control.git
-cd mission-control
+git clone https://github.com/yoonzine22/agent-pool-studio.git
+cd agent-pool-studio
 bash install.sh --local
 ```
 
